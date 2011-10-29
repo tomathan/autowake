@@ -1,0 +1,91 @@
+#!/bin/bash
+
+# Auto sleep computer, wake up at specified time, play user-set music as alarm
+# Tested on Ubuntu 10.04 (Lucid Lynx)
+
+# Modified by Tom Guo <tomguo@cs.washington.edu> from code found at http://askubuntu.com/questions/61708/automatically-sleep-and-wake-up-at-specific-times by Romke van der Meulen <redge.online@gmail.com>
+
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Takes a 24hour time HH:MM as its argument
+# Examples:
+# alarm 09:30
+# alarm 18:45
+
+# ------------------------------------------------------
+# Argument check
+if [ $# -lt 1 ]; then
+	echo "Usage: suspend_until HH:MM"
+fi
+
+echo "Alarm will be set to $1"
+
+# Check whether specified time today or tomorrow
+DESIRED=$((`date +%s -d "$1"`))
+NOW=$((`date +%s`))
+if [ $DESIRED -lt $NOW ]; then
+	DESIRED=$((`date +%s -d "$1"` + 24*60*60))
+fi
+
+# Define hours/mins/sec to wake-up (for printing purposes only):
+hours=$(((DESIRED-NOW)/3600))
+minutes=$((  ((DESIRED-NOW)-(hours*3600))/60  ))
+seconds=$(( ((DESIRED-NOW)-((hours*3600)+(minutes*60)))  ))
+
+# Kill rtcwake if already running
+sudo killall rtcwake &>/dev/null
+
+# Let user know what we're going to do
+echo "Your computer will sleep for $hours h $minutes min"
+
+# give user LEFT seconds to cancel
+LEFT=9
+ZERO=0
+while [[ $LEFT -gt $ZERO ]]
+do
+    printf "\rPress Ctrl+c in %d s to cancel." \ $LEFT
+    sleep 1
+    let "LEFT -= 1"
+done
+printf "\rAbout to sleep...             \n"
+
+# Set RTC wakeup time
+sudo rtcwake -m mem -s $((DESIRED-NOW)) &>/dev/null
+
+# -------------------------------------------------------------------------------------
+# Any commands you want to launch after wakeup can be placed here
+# Remember: sudo may have expired by now
+
+# Wake up with monitor disabled
+# xset dpms force off
+
+# Set volume level and (just in case) unmute system
+amixer -c 0 set Master 80% unmute &>/dev/null
+amixer -c 0 set PCM 80% unmute &>/dev/null
+
+printf "\nGood morning! Your computer is now awake after sleeping for $hours h $minutes min!\n"
+
+# play a random mp3 file in specified directory, in fullscreen mode
+totem --fullscreen "$(ls ~/Music/*.mp3 | shuf -n1)" &>/dev/null &
+
+# Unload rtcwake if it's running, otherwise next time computer won't wake up from sleep
+SERVICE='rtcwake'
+if ps ax | grep -v grep | grep $SERVICE > /dev/null
+then
+    sudo killall rtcwake &>/dev/null
+fi
+
+exit
+
